@@ -19,6 +19,18 @@ jobs:
           set -x
           git clone --depth=1 --branch wip-sukisu https://github.com/UdayKumarChunduru/fusionX_sm8250.git kernel
 
+        # 新增：克隆并应用4.19 hook补丁
+      - name: 克隆补丁仓库
+        run: git clone --depth=1 ${{ github.event.inputs.PATCH_REPO }} patches
+
+      - name: 应用4.19 hook补丁
+        run: |
+          cd kernel  # 进入内核源码目录
+          # 应用补丁（-p1表示忽略补丁路径中的第一个目录层级，适应大多数补丁格式）
+          patch -p1 < ../patches/${{ github.event.inputs.PATCH_FILE }}
+          # 若补丁可能有冲突，可添加--ignore-whitespace忽略空格差异（可选）
+          # patch -p1 --ignore-whitespace < ../patches/${{ github.event.inputs.PATCH_FILE }}
+
       - name: Setup
         run: |
           set -x
@@ -63,6 +75,15 @@ jobs:
 
              cd kernel
              make $MAKE_ARGS vendor/munch_defconfig
+             scripts/config --file out/.config \
+             -e KSU \
+             -e KSU_MANUAL_HOOK \
+             -e KPROBES \
+             -e HAVE_KPROBES \
+             -e KPROBE_EVENTS \
+             -e KPM \
+             -e KALLSYMS \
+             -e KALLSYMS_ALL
              make $MAKE_ARGS -j$(nproc --all)
              echo "✅ Kernel build completed successfully"
              
