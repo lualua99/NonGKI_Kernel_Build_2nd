@@ -62,7 +62,8 @@ jobs:
              export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
 
              cd kernel
-             make $MAKE_ARGS vendor/munch_defconfig  # 这行就是你需要的命令，已存在
+             make $MAKE_ARGS vendor/munch_defconfig
+             make $MAKE_ARGS -j$(nproc --all)
              echo "✅ Kernel build completed successfully"
              
       - name: Debug - Check kernel artifacts
