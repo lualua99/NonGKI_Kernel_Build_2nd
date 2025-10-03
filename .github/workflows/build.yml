@@ -5,6 +5,16 @@ on:
   push:
     branches: [ main ]
 
+
+PATCH_REPO:
+        description: '4.19 hook补丁仓库'
+        default: 'https://github.com/SukiSU-Ultra/SukiSU_patch.git'
+        required: true
+      PATCH_FILE:
+        description: '补丁文件名（仓库内的路径）'
+        default: '4.19/ksu_hooks_sukisu_4.19.patch'
+        required: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
