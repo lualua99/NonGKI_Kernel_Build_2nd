@@ -2,16 +2,20 @@ name: Kernel Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-  PATCH_REPO:
-        description: '4.19 hook补丁仓库'
+    inputs:
+      PATCH_REPO:
+        description: '4.19 hook patch repository'
         default: 'https://github.com/SukiSU-Ultra/SukiSU_patch.git'
         required: true
+        type: string
       PATCH_FILE:
-        description: '补丁文件名（仓库内的路径）'
+        description: 'Patch file path in repository'
         default: '4.19/ksu_hooks_sukisu_4.19.patch'
         required: true
+        type: string
+  push:
+    branches: [ main ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,76 +30,90 @@ jobs:
           set -x
           git clone --depth=1 --branch wip-sukisu https://github.com/UdayKumarChunduru/fusionX_sm8250.git kernel
 
-        # 新增：克隆并应用4.19 hook补丁
-      - name: 克隆补丁仓库
-        run: git clone --depth=1 ${{ github.event.inputs.PATCH_REPO }} patches
-
-      - name: 应用4.19 hook补丁
+      - name: Clone patch repository
         run: |
-          cd kernel  # 进入内核源码目录
-          # 应用补丁（-p1表示忽略补丁路径中的第一个目录层级，适应大多数补丁格式）
-          patch -p1 < ../patches/${{ github.event.inputs.PATCH_FILE }}
-          # 若补丁可能有冲突，可添加--ignore-whitespace忽略空格差异（可选）
-          # patch -p1 --ignore-whitespace < ../patches/${{ github.event.inputs.PATCH_FILE }}
+          set -x
+          git clone --depth=1 ${{ github.event.inputs.PATCH_REPO }} patches
 
-      - name: Setup
+      - name: Apply 4.19 hook patch
+        run: |
+          set -x
+          cd kernel
+          # Apply patch (ignore first directory level with -p1)
+          patch -p1 < ../patches/${{ github.event.inputs.PATCH_FILE }}
+
+      - name: Setup build environment
         run: |
           set -x
           sudo apt-get update
-          sudo apt-get install -y zstd \
-          build-essential \
-          libelf-dev \
-          flex \
-          bison \
-          libncurses-dev \
-          libssl-dev \
-          ccache \
-          wget \
-          git \
-          zip \
-          unzip \
-          curl \
-          tar \
-          gcc-aarch64-linux-gnu \
-          gcc-arm-linux-gnueabi
+          sudo apt-get install -y \
+            zstd \
+            build-essential \
+            libelf-dev \
+            flex \
+            bison \
+            libncurses-dev \
+            libssl-dev \
+            ccache \
+            wget \
+            git \
+            zip \
+            unzip \
+            curl \
+            tar \
+            gcc-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi
 
+          # Download and setup Clang
           wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz -O clang.tar.gz
           mkdir -p clang-aosp-20
           tar -xf clang.tar.gz -C clang-aosp-20
           echo "aosp-20-r547379" > clang-version
           echo "CLANG_PATH=$(pwd)/clang-aosp-20/bin" >> $GITHUB_ENV
 
+          # Run kernel setup script
           cd kernel
           bash setup_sukisu.sh
 
       - name: Build Kernel
         run: |
-           set -x
-             echo "CLANG_PATH is: $CLANG_PATH"
-             ls -la $CLANG_PATH/
-             export PATH="$CLANG_PATH:$PATH"
-             export KBUILD_BUILD_USER="Uday"
-             export KBUILD_BUILD_HOST="GitHub"
-             export KBUILD_BUILD_TIMESTAMP="$(TZ=Asia/Kolkata date)"
+          set -x
+          echo "CLANG_PATH is: $CLANG_PATH"
+          ls -la $CLANG_PATH/
+          export PATH="$CLANG_PATH:$PATH"
+          export KBUILD_BUILD_USER="Uday"
+          export KBUILD_BUILD_HOST="GitHub"
+          export KBUILD_BUILD_TIMESTAMP="$(TZ=Asia/Kolkata date)"
 
-             export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
+          export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            LLVM=1 \
+            LLVM_IAS=1"
 
-             cd kernel
-             make $MAKE_ARGS vendor/munch_defconfig
-             scripts/config --file out/.config \
-             -e KSU \
-             -e KSU_MANUAL_HOOK \
-             -e KPROBES \
-             -e HAVE_KPROBES \
-             -e KPROBE_EVENTS \
-             -e KPM \
-             -e KALLSYMS \
-             -e KALLSYMS_ALL
-             make $MAKE_ARGS -j$(nproc --all)
-             echo "✅ Kernel build completed successfully"
-             
+          cd kernel
+          # Generate defconfig
+          make $MAKE_ARGS vendor/munch_defconfig
+          # Enable required configs
+          scripts/config --file out/.config \
+            -e KSU \
+            -e KSU_MANUAL_HOOK \
+            -e KPROBES \
+            -e HAVE_KPROBES \
+            -e KPROBE_EVENTS \
+            -e KPM \
+            -e KALLSYMS \
+            -e KALLSYMS_ALL
+          # Start build
+          make $MAKE_ARGS -j$(nproc --all)
+          echo "✅ Kernel build completed successfully"
+
       - name: Debug - Check kernel artifacts
         run: |
+          set -x
           cd kernel/out/arch/arm64/boot
           echo "Files in boot directory:"
           ls -la
@@ -105,7 +123,6 @@ jobs:
       - name: Apply KPM Patch
         run: |
           set -x
-
           cd kernel/out/arch/arm64/boot/
           wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.0/patch_linux
           chmod +x patch_linux
@@ -116,22 +133,24 @@ jobs:
 
       - name: Clone AnyKernel3
         run: |
+          set -x
           git clone --depth=1 https://github.com/SenseiiX/AnyKernel3.git anykernel
 
       - name: Copy Kernel Files to AnyKernel3
         run: |
-          # Copy the actual kernel output files to AnyKernel3
+          set -x
+          # Copy kernel output files
           cp kernel/out/arch/arm64/boot/Image.gz anykernel/
           cp kernel/out/arch/arm64/boot/dtbo.img anykernel/
           cp kernel/out/arch/arm64/boot/dtb.img anykernel/
 
-          # List files to verify
+          # Verify copied files
           echo "Files copied to AnyKernel3:"
           ls -la anykernel/
 
       - name: Package Kernel with AnyKernel3
         run: |
-          # Create ZIP file with timestamp
+          set -x
           cd anykernel
           zip -r9 ../kernel-build-$(date +%Y%m%d-%H%M).zip *
 
