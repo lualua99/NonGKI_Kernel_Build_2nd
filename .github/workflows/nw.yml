@@ -1,0 +1,125 @@
+name: Kernel Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone Kernel Source
+        run: |
+          set -x
+          git clone --depth=1 --branch wip-sukisu https://github.com/UdayKumarChunduru/fusionX_sm8250.git kernel
+
+      - name: Setup
+        run: |
+          set -x
+          sudo apt-get update
+          sudo apt-get install -y zstd \
+          build-essential \
+          libelf-dev \
+          flex \
+          bison \
+          libncurses-dev \
+          libssl-dev \
+          ccache \
+          wget \
+          git \
+          zip \
+          unzip \
+          curl \
+          tar \
+          gcc-aarch64-linux-gnu \
+          gcc-arm-linux-gnueabi
+
+          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r547379.tar.gz -O clang.tar.gz
+          mkdir -p clang-aosp-20
+          tar -xf clang.tar.gz -C clang-aosp-20
+          echo "aosp-20-r547379" > clang-version
+          echo "CLANG_PATH=$(pwd)/clang-aosp-20/bin" >> $GITHUB_ENV
+
+          cd kernel
+          bash setup_sukisu.sh
+
+      - name: Build Kernel
+        run: |
+          set -x
+          echo "CLANG_PATH is: $CLANG_PATH"
+          ls -la $CLANG_PATH/
+          export PATH="$CLANG_PATH:$PATH"
+          export KBUILD_BUILD_USER="Uday"
+          export KBUILD_BUILD_HOST="GitHub"
+          export KBUILD_BUILD_TIMESTAMP="$(TZ=Asia/Kolkata date)"
+
+          export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
+
+          cd kernel
+          make $MAKE_ARGS vendor/munch_defconfig
+          scripts/config --file out/.config \
+          -e KSU \
+          -e KSU_MANUAL_HOOK \
+          -e KPROBES \
+          -e HAVE_KPROBES \
+          -e KPROBE_EVENTS \
+          -e KPM \
+          -e KALLSYMS \
+          -e KALLSYMS_ALL \
+          -e CONFIG_MODULES
+          make $MAKE_ARGS -j$(nproc --all)
+
+          echo "✅ Kernel build completed successfully"
+
+      - name: Debug - Check kernel artifacts
+        run: |
+          cd kernel/out/arch/arm64/boot
+          echo "Files in boot directory:"
+          ls -la
+          echo "File sizes:"
+          du -h *
+
+      - name: Apply KPM Patch
+        run: |
+          set -x
+
+          cd kernel/out/arch/arm64/boot/
+          wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.0/patch_linux
+          chmod +x patch_linux
+          ./patch_linux
+          rm Image.gz
+          gzip -c oImage > Image.gz
+          cd -
+
+      - name: Clone AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/SenseiiX/AnyKernel3.git anykernel
+
+      - name: Copy Kernel Files to AnyKernel3
+        run: |
+          # Copy the actual kernel output files to AnyKernel3
+          cp kernel/out/arch/arm64/boot/Image.gz anykernel/
+          cp kernel/out/arch/arm64/boot/dtbo.img anykernel/
+          cp kernel/out/arch/arm64/boot/dtb.img anykernel/
+
+          # List files to verify
+          echo "Files copied to AnyKernel3:"
+          ls -la anykernel/
+
+      - name: Package Kernel with AnyKernel3
+        run: |
+          # Create ZIP file with timestamp
+          cd anykernel
+          zip -r9 ../kernel-build-$(date +%Y%m%d-%H%M).zip *
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build
+          path: kernel-build-*.zip
