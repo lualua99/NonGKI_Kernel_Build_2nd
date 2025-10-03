@@ -28,7 +28,7 @@ jobs:
       - name: Clone Kernel Source
         run: |
           set -x
-          git clone --depth=1 --branch wip-sukisu https://github.com/UdayKumarChunduru/fusionX_sm8250.git kernel
+          git clone --depth=1 --branch wip-noksu https://github.com/UdayKumarChunduru/fusionX_sm8250.git kernel
 
       - name: Clone patch repository
         run: |
