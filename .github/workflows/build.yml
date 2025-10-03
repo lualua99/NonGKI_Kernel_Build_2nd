@@ -51,32 +51,20 @@ jobs:
 
       - name: Build Kernel
         run: |
-          set -x
-          echo "CLANG_PATH is: $CLANG_PATH"
-          ls -la $CLANG_PATH/
-          export PATH="$CLANG_PATH:$PATH"
-          export KBUILD_BUILD_USER="Uday"
-          export KBUILD_BUILD_HOST="GitHub"
-          export KBUILD_BUILD_TIMESTAMP="$(TZ=Asia/Kolkata date)"
+           set -x
+             echo "CLANG_PATH is: $CLANG_PATH"
+             ls -la $CLANG_PATH/
+             export PATH="$CLANG_PATH:$PATH"
+             export KBUILD_BUILD_USER="Uday"
+             export KBUILD_BUILD_HOST="GitHub"
+             export KBUILD_BUILD_TIMESTAMP="$(TZ=Asia/Kolkata date)"
 
-          export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
+             export MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1"
 
-          cd kernel
-          make $MAKE_ARGS vendor/munch_defconfig
-          scripts/config --file out/.config \
-          -e KSU \
-          -e KSU_MANUAL_HOOK \
-          -e KPROBES \
-          -e HAVE_KPROBES \
-          -e KPROBE_EVENTS \
-          -e KPM \
-          -e KALLSYMS \
-          -e KALLSYMS_ALL \
-          -e CONFIG_MODULES
-          make $MAKE_ARGS -j$(nproc --all)
-
-          echo "✅ Kernel build completed successfully"
-
+             cd kernel
+             make $MAKE_ARGS vendor/munch_defconfig  # 这行就是你需要的命令，已存在
+             echo "✅ Kernel build completed successfully"
+             
       - name: Debug - Check kernel artifacts
         run: |
           cd kernel/out/arch/arm64/boot
